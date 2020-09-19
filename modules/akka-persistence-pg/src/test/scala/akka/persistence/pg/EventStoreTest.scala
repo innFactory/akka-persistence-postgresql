@@ -4,7 +4,6 @@ import java.time.format.DateTimeFormatter
 
 import akka.actor.Props
 import akka.persistence.pg.TestActor._
-import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Sink, Source}
 import org.scalatest.concurrent.Eventually
 
@@ -16,7 +15,7 @@ class EventStoreTest extends AbstractEventStoreTest with Eventually {
 
   import driver.api._
 
-  implicit val materializer = ActorMaterializer()
+  implicit val materializer = system
 
   test("generate events") {
     val test = system.actorOf(Props(new TestActor(testProbe.ref)))
@@ -59,7 +58,7 @@ class EventStoreTest extends AbstractEventStoreTest with Eventually {
 
     database.run(events.size.result).futureValue shouldBe 1
     val storedEvent = database.run(events.result.head).futureValue
-    getCreated(storedEvent.event) shouldBe  DateTimeFormatter.ISO_DATE_TIME.format(storedEvent.created)
+    getCreated(storedEvent.event) shouldBe DateTimeFormatter.ISO_DATE_TIME.format(storedEvent.created)
   }
 
   //put on ignore because the assertion can NOT be guaranteed, the timestamps could very well be the same
@@ -73,12 +72,11 @@ class EventStoreTest extends AbstractEventStoreTest with Eventually {
 
     database.run(events.size.result).futureValue shouldBe 1
     val storedEvent = database.run(events.result.head).futureValue
-    getCreated(storedEvent.event) shouldNot  be(DateTimeFormatter.ISO_DATE_TIME.format(storedEvent.created))
+    getCreated(storedEvent.event) shouldNot be(DateTimeFormatter.ISO_DATE_TIME.format(storedEvent.created))
   }
 
-  def getCreated(jsonString: JsonString): Any = {
+  def getCreated(jsonString: JsonString): Any =
     JSON.parseFull(jsonString.value).get.asInstanceOf[Map[String, Any]]("created")
-  }
 
   test("generate snapshots") {
     val test = system.actorOf(Props(new TestActor(testProbe.ref)))
@@ -135,20 +133,17 @@ class EventStoreTest extends AbstractEventStoreTest with Eventually {
     database.run(journals.size.result).futureValue shouldBe 10
 
     val storedEvents = ListBuffer[TestActor.Event]()
-    val eventStore = pluginConfig.eventStore.get
+    val eventStore   = pluginConfig.eventStore.get
 
     Source
       .fromPublisher(database.stream(eventStore.allEvents()))
       .to(Sink.foreach[akka.persistence.pg.event.Event] { e =>
         storedEvents.append(eventStore.toDomainEvent[TestActor.Event](e))
-      }).run()
-
+      })
+      .run()
 
     eventually(storedEvents.size shouldBe 10)
 
   }
 
 }
-
-
-

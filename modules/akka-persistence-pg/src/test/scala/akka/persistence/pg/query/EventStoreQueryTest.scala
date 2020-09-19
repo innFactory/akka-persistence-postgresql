@@ -3,7 +3,6 @@ package akka.persistence.pg.query
 import akka.actor.Props
 import akka.persistence.pg.TestActor._
 import akka.persistence.pg._
-import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import com.typesafe.config.ConfigFactory
 import org.scalatest.concurrent.Eventually
@@ -13,12 +12,10 @@ import scala.concurrent.Future
 /**
   * uses the default RowIdUpdating write strategy and will use the "rowid" column of the journal
   * table for queries
- */
+  */
 class EventStoreQueryTest extends AbstractEventStoreTest with Eventually {
 
   override lazy val config = ConfigFactory.load("pg-eventstore-rowid.conf")
-
-  implicit val materializer = ActorMaterializer()
 
   test("query tagged events (tagged with 'Altered')") {
 
@@ -50,7 +47,7 @@ class EventStoreQueryTest extends AbstractEventStoreTest with Eventually {
     eventSource.to(sink).run()
 
     checkSizeReceivedEvents(2)
-    testProbe.send(test, Alter("bar"))
+    testProbe.send(test, Alter("baz"))
     testProbe.expectMsg("j")
     testProbe.send(test, Increment(1))
     testProbe.expectMsg("j")
@@ -71,11 +68,10 @@ class EventStoreQueryTest extends AbstractEventStoreTest with Eventually {
 
     var events = List[TestActor.Event]()
 
-    def checkSizeReceivedEvents(size: Int) = {
+    def checkSizeReceivedEvents(size: Int) =
       eventually {
         events should have size size
       }
-    }
 
     // a Sink that will append each event to the Events List
     val sink = Sink.foreach[TestActor.Event] { e =>
@@ -106,11 +102,10 @@ class EventStoreQueryTest extends AbstractEventStoreTest with Eventually {
 
     var events = List[TestActor.Event]()
 
-    def checkSizeReceivedEvents(size: Int) = {
+    def checkSizeReceivedEvents(size: Int) =
       eventually {
         events should have size size
       }
-    }
 
     // a Sink that will append each event to the Events List
     val sink = Sink.foreach[TestActor.Event] { e =>
@@ -142,11 +137,10 @@ class EventStoreQueryTest extends AbstractEventStoreTest with Eventually {
 
     var events = List[TestActor.Event]()
 
-    def checkSizeReceivedEvents(size: Int) = {
+    def checkSizeReceivedEvents(size: Int) =
       eventually {
         events should have size size
       }
-    }
 
     // a Sink that will append each event to the Events List
     val sink = Sink.foreach[TestActor.Event] { e =>
@@ -169,12 +163,12 @@ class EventStoreQueryTest extends AbstractEventStoreTest with Eventually {
     val eventSource = startCurrentSource[TestActor.Event](Set(TestTags.alteredTag), 0)
 
     val test = system.actorOf(Props(new TestActor(testProbe.ref)))
-    testProbe.send(test, Alter("foo"))
-    testProbe.expectMsg("j")
-    testProbe.send(test, Alter("bar"))
-    testProbe.expectMsg("j")
-    testProbe.send(test, Increment(1))
-    testProbe.expectMsg("j")
+
+    1 to 500 foreach { index =>
+      if (index % 50 == 0) testProbe.send(test, Increment(1))
+      else testProbe.send(test, Alter("foo-" + index))
+      testProbe.expectMsg("j")
+    }
 
     // wait until rowids are updated
     PgExtension(system).whenDone(Future.successful(())).futureValue
@@ -196,12 +190,12 @@ class EventStoreQueryTest extends AbstractEventStoreTest with Eventually {
 
     eventSource.to(sink).run()
 
-    checkSizeReceivedEvents(2)
+    checkSizeReceivedEvents(490)
     testProbe.send(test, Alter("bar"))
     testProbe.expectMsg("j")
     testProbe.send(test, Increment(1))
     testProbe.expectMsg("j")
-    checkSizeReceivedEvents(2)
+    checkSizeReceivedEvents(490)
   }
 
   test("query current tagged events (tagged with 'Altered' or 'Incremented')") {
@@ -209,23 +203,22 @@ class EventStoreQueryTest extends AbstractEventStoreTest with Eventually {
     val eventSource = startCurrentSource[TestActor.Event](Set(TestTags.alteredTag, TestTags.incrementedTag), 0)
 
     val test = system.actorOf(Props(new TestActor(testProbe.ref)))
-    testProbe.send(test, Alter("foo"))
-    testProbe.expectMsg("j")
-    testProbe.send(test, Alter("bar"))
-    testProbe.expectMsg("j")
-    testProbe.send(test, Increment(1))
-    testProbe.expectMsg("j")
+
+    1 to 500 foreach { index =>
+      if (index % 2 == 0) testProbe.send(test, Increment(1))
+      else testProbe.send(test, Alter("foo-" + index))
+      testProbe.expectMsg("j")
+    }
 
     // wait until rowids are updated
     PgExtension(system).whenDone(Future.successful(())).futureValue
 
     var events = List[TestActor.Event]()
 
-    def checkSizeReceivedEvents(size: Int) = {
+    def checkSizeReceivedEvents(size: Int) =
       eventually {
         events should have size size
       }
-    }
 
     // a Sink that will append each event to the Events List
     val sink = Sink.foreach[TestActor.Event] { e =>
@@ -234,12 +227,12 @@ class EventStoreQueryTest extends AbstractEventStoreTest with Eventually {
 
     eventSource.to(sink).run()
 
-    checkSizeReceivedEvents(3)
+    checkSizeReceivedEvents(500)
     testProbe.send(test, Alter("bar"))
     testProbe.expectMsg("j")
     testProbe.send(test, Increment(1))
     testProbe.expectMsg("j")
-    checkSizeReceivedEvents(3)
+    checkSizeReceivedEvents(500)
   }
 
   test("query current all events") {
@@ -247,23 +240,21 @@ class EventStoreQueryTest extends AbstractEventStoreTest with Eventually {
     val eventSource = startCurrentSource[TestActor.Event](0)
 
     val test = system.actorOf(Props(new TestActor(testProbe.ref)))
-    testProbe.send(test, Alter("foo"))
-    testProbe.expectMsg("j")
-    testProbe.send(test, Alter("bar"))
-    testProbe.expectMsg("j")
-    testProbe.send(test, Increment(1))
-    testProbe.expectMsg("j")
+
+    1 to 500 foreach { index =>
+      testProbe.send(test, Alter(s"foo-$index"))
+      testProbe.expectMsg("j")
+    }
 
     // wait until rowids are updated
     PgExtension(system).whenDone(Future.successful(())).futureValue
 
     var events = List[TestActor.Event]()
 
-    def checkSizeReceivedEvents(size: Int) = {
+    def checkSizeReceivedEvents(size: Int) =
       eventually {
         events should have size size
       }
-    }
 
     // a Sink that will append each event to the Events List
     val sink = Sink.foreach[TestActor.Event] { e =>
@@ -272,37 +263,38 @@ class EventStoreQueryTest extends AbstractEventStoreTest with Eventually {
 
     eventSource.to(sink).run()
 
-    checkSizeReceivedEvents(3)
+    checkSizeReceivedEvents(500)
     testProbe.send(test, Alter("bar"))
     testProbe.expectMsg("j")
     testProbe.send(test, Increment(1))
     testProbe.expectMsg("j")
-    checkSizeReceivedEvents(3)
+    checkSizeReceivedEvents(500)
 
   }
 
-  test("query current events by persistenceId") {
+  test("query current events by persistenceId with from and to sequence number") {
 
-    val eventSource = startCurrentSource[TestActor.Event]("TestActor", 0)
+    val eventSource = startCurrentSource[TestActor.Event]("TestActor", 0, 280)
 
-    val test = system.actorOf(Props(new TestActor(testProbe.ref, Some("TestActor"))))
-    testProbe.send(test, Alter("foo"))
-    testProbe.expectMsg("j")
-    testProbe.send(test, Alter("bar"))
-    testProbe.expectMsg("j")
-    testProbe.send(test, Increment(1))
-    testProbe.expectMsg("j")
+    val testOne = system.actorOf(Props(new TestActor(testProbe.ref, Some("TestActor"))))
+    val testTwo = system.actorOf(Props(new TestActor(testProbe.ref, Some("TestActor2"))))
+
+    1 to 500 foreach { index =>
+      testProbe.send(testOne, Alter("foo-" + index))
+      testProbe.expectMsg("j")
+      testProbe.send(testTwo, Alter("bar-" + index))
+      testProbe.expectMsg("j")
+    }
 
     // wait until rowids are updated
     PgExtension(system).whenDone(Future.successful(())).futureValue
 
     var events = List[TestActor.Event]()
 
-    def checkSizeReceivedEvents(size: Int) = {
+    def checkSizeReceivedEvents(size: Int) =
       eventually {
         events should have size size
       }
-    }
 
     // a Sink that will append each event to the Events List
     val sink = Sink.foreach[TestActor.Event] { e =>
@@ -311,12 +303,49 @@ class EventStoreQueryTest extends AbstractEventStoreTest with Eventually {
 
     eventSource.to(sink).run()
 
-    checkSizeReceivedEvents(3)
+    checkSizeReceivedEvents(280)
+    testProbe.send(testOne, Alter("bar"))
+    testProbe.expectMsg("j")
+    testProbe.send(testOne, Increment(1))
+    testProbe.expectMsg("j")
+    checkSizeReceivedEvents(280)
+
+  }
+
+  test("query current persistenceIds") {
+
+    val eventSource = startCurrentSource()
+
+    val test = system.actorOf(Props(new TestActor(testProbe.ref)))
+
+    1 to 500 foreach { index =>
+      testProbe.send(test, Alter(s"foo-$index"))
+      testProbe.expectMsg("j")
+    }
+
+    // wait until rowids are updated
+    PgExtension(system).whenDone(Future.successful(())).futureValue
+
+    var persistenceIds = List[String]()
+
+    def checkSizeReceivedEvents(size: Int) =
+      eventually {
+        persistenceIds should have size size
+      }
+
+    // a Sink that will append each event to the Events List
+    val sink = Sink.foreach[String] { e =>
+      persistenceIds = persistenceIds :+ e
+    }
+
+    eventSource.to(sink).run()
+
+    checkSizeReceivedEvents(1)
     testProbe.send(test, Alter("bar"))
     testProbe.expectMsg("j")
     testProbe.send(test, Increment(1))
     testProbe.expectMsg("j")
-    checkSizeReceivedEvents(3)
+    checkSizeReceivedEvents(1)
 
   }
 

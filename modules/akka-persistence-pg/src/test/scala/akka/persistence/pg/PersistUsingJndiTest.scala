@@ -1,8 +1,8 @@
 package akka.persistence.pg
 
 import java.util.concurrent.TimeUnit
-import javax.naming.{Context, InitialContext}
 
+import javax.naming.{Context, InitialContext}
 import akka.actor._
 import akka.persistence.pg.TestActor.{Alter, GetState, TheState}
 import akka.persistence.pg.journal.JournalTable
@@ -11,30 +11,32 @@ import akka.testkit.TestProbe
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import org.postgresql.ds.PGSimpleDataSource
-import org.scalatest._
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Milliseconds, Seconds, Span}
 
-class PersistUsingJndiTest extends FunSuite
-  with Matchers
-  with BeforeAndAfterAll
-  with JournalTable
-  with CreateTables
-  with RecreateSchema
-  with PgConfig
-  with WaitForEvents
-  with ScalaFutures
-{
+class PersistUsingJndiTest
+    extends AnyFunSuite
+    with Matchers
+    with BeforeAndAfterAll
+    with JournalTable
+    with CreateTables
+    with RecreateSchema
+    with PgConfig
+    with WaitForEvents
+    with ScalaFutures {
 
   override implicit val patienceConfig = PatienceConfig(timeout = Span(3, Seconds), interval = Span(100, Milliseconds))
 
-  val config: Config = ConfigFactory.load("pg-persist-jndi.conf")
-  implicit val system =  ActorSystem("TestCluster", config)
+  val config: Config                           = ConfigFactory.load("pg-persist-jndi.conf")
+  implicit val system                          = ActorSystem("TestCluster", config)
   override lazy val pluginConfig: PluginConfig = PgExtension(system).pluginConfig
 
   import driver.api._
 
-  val testProbe = TestProbe()
+  val testProbe        = TestProbe()
   implicit val timeOut = Timeout(1, TimeUnit.MINUTES)
 
   test("generate events") {
@@ -53,7 +55,7 @@ class PersistUsingJndiTest extends FunSuite
     database.run(journals.size.result).futureValue shouldBe 2
   }
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     System.setProperty(Context.INITIAL_CONTEXT_FACTORY, "tyrex.naming.MemoryContextFactory")
     System.setProperty(Context.PROVIDER_URL, "/")
 
@@ -75,7 +77,4 @@ class PersistUsingJndiTest extends FunSuite
     ()
   }
 
-
 }
-
-
